@@ -6,13 +6,14 @@ import { createLink } from "@/lib/message-store";
 import { SqliteSessionStore } from "@/lib/session-store";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import { NextRequest } from "next/server";
-import { getOldLink, getMessagesForLink } from "@/lib/message-store";
+import { getOldLink } from "@/lib/message-store";
 
 export const runtime = "nodejs";
 
 const store = new SqliteSessionStore();
 
 export async function POST() {
+  // console.log("POST /api/ask/create called");
   const cookieStore = await cookies();
   const sid = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -35,7 +36,7 @@ export async function POST() {
     }
   }
 
-  console.log("effectiveSid=", effectiveSid);
+  // console.log("effectiveSid=", effectiveSid);
 
   // Create new session
   if (!effectiveSid) {
@@ -95,14 +96,14 @@ export async function GET(
 //   { params }: { > },
 ) {
 //   const { id } = await params;
-
+  // console.log("GET /api/ask/create called");
   const cookieStore = await cookies();
   const sid = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   const oldLink = getOldLink(String(sid));
-  const url = `${process.env.AUTH_URL ?? "http://localhost:3000"}/s/${oldLink}`;
+  console.log("Old link for sid", sid, "is", oldLink);
 
-  
+  const url = oldLink ? `${process.env.AUTH_URL ?? "http://localhost:3000"}/s/${oldLink}` : null;
 
   return NextResponse.json({ ok: true, url });
 }
