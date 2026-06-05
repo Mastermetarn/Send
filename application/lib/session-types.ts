@@ -12,5 +12,6 @@ export type AppSession = {
   lastSeenAt?: string;
   userAgent?: string | null;
   ipAddress?: string | null;
+  oneTimeRead?: boolean;
   [key: string]: unknown;
 };

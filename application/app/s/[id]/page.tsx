@@ -37,6 +37,15 @@ export default function SessionPage() {
             body: JSON.stringify({ content }),
         });
 
+        if (res.status === 404) {
+            const data = await res.json().catch(() => ({} as any));
+            if (data?.error === "not-found") {
+                setStatus("link-deleted");
+                setValidLink(false);
+                return;
+            }
+        }
+
         setStatus(res.ok ? "sent" : "error");
         setContent("");
     }
@@ -71,7 +80,11 @@ export default function SessionPage() {
                 Send
             </button>
 
-            {status && <p className="mt-2">Status: {status}</p>}
+            {status === "link-deleted" ? (
+                <p className="mt-2 text-red-600">Link no longer exists.</p>
+            ) : (
+                status && <p className="mt-2">Status: {status}</p>
+            )}
         </div>
     );
 }

@@ -22,6 +22,7 @@ export async function POST() {
       const updatedSession: AppSession = {
         ...session,
         lastSeenAt: new Date().toISOString(),
+        oneTimeRead: session.oneTimeRead ?? false,
       };
 
       await store.touch(existingSid, updatedSession);
@@ -45,11 +46,12 @@ export async function POST() {
 
   const maxAge = 30 * 24 * 60 * 60;
 
-  const sessionObj = {
+  const sessionObj: AppSession = {
     startedAt: now,
     lastSeenAt: now,
     userAgent,
     ipAddress: ip,
+    oneTimeRead: false,
     cookie: {
       httpOnly: true,
       path: "/",

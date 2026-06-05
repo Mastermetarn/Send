@@ -16,6 +16,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS links (
     id TEXT PRIMARY KEY,
     ownerSid TEXT NOT NULL,
+    oneTimeRead INTEGER NOT NULL,
     created_at INTEGER NOT NULL
   );
 
@@ -27,6 +28,21 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 `);
+
+const linkInfo = db.prepare("PRAGMA table_info(links)").all() as Array<{
+  name: string;
+}>;
+if (!linkInfo.find((c) => c.name === "oneTimeRead")) {
+  db.exec(`
+    DROP TABLE IF EXISTS links;
+    CREATE TABLE links (
+      id TEXT PRIMARY KEY,
+      ownerSid TEXT NOT NULL,
+      oneTimeRead INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `);
+}
 
 // Migrate: ensure messages.poster_sid column exists for older DBs
 const msgInfo = db.prepare("PRAGMA table_info(messages)").all() as Array<{
@@ -40,7 +56,7 @@ if (!msgInfo.find((c) => c.name === "poster_sid")) {
   }
 }
 
-export function createLink(id: string, ownerSid: string) {
+export function createLink(id: string, ownerSid: string, oneTimeRead: boolean) {
   const now = Date.now();
 
   //remove old link for this owner if exists
@@ -51,8 +67,8 @@ export function createLink(id: string, ownerSid: string) {
   }
 
   db.prepare(
-    "INSERT INTO links (id, ownerSid, created_at) VALUES (?, ?, ?)",
-  ).run(id, ownerSid, now);
+    "INSERT INTO links (id, ownerSid, oneTimeRead, created_at) VALUES (?, ?, ?, ?)",
+  ).run(id, ownerSid, oneTimeRead ? 1 : 0, now);
 }
 
 export function getLinkOwner(id: string) {
@@ -60,6 +76,14 @@ export function getLinkOwner(id: string) {
     | { ownerSid: string }
     | undefined;
   return row?.ownerSid ?? null;
+}
+
+export function getLinkOneTimeRead(id: string) {
+  const row = db.prepare("SELECT oneTimeRead FROM links WHERE id = ?").get(id) as
+    | { oneTimeRead: number }
+    | undefined;
+
+  return row?.oneTimeRead === 1;
 }
 
 // In-memory emitters for Server-Sent Events per link
@@ -146,6 +170,40 @@ export function getMessagesForLink(linkId: string) {
     posterSid: r.poster_sid ?? null,
     createdAt: r.created_at,
   }));
+}
+
+export function getMessageCountForLink(linkId: string) {
+  const row = db
+    .prepare("SELECT COUNT(*) AS count FROM messages WHERE link_id = ?")
+    .get(linkId) as { count: number } | undefined;
+
+  return row?.count ?? 0;
+}
+
+export function consumeMessagesForLink(linkId: string) {
+  const consume = db.transaction((targetLinkId: string) => {
+    const rows = db
+      .prepare(
+        "SELECT id, content, poster_sid, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
+      )
+      .all(targetLinkId) as Array<{
+      id: number;
+      content: string;
+      poster_sid?: string | null;
+      created_at: number;
+    }>;
+
+    db.prepare("DELETE FROM messages WHERE link_id = ?").run(targetLinkId);
+
+    return rows.map((r) => ({
+      id: r.id,
+      content: r.content,
+      posterSid: r.poster_sid ?? null,
+      createdAt: r.created_at,
+    }));
+  });
+
+  return consume(linkId);
 }
 
 // CREATE TABLE IF NOT EXISTS links (

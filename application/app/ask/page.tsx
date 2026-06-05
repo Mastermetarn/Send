@@ -8,20 +8,33 @@ export default function CreatePage() {
     const [url, setUrl] = useState<string | null>(null);
     const [linkId, setLinkId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [oneTimeRead, setOneTimeRead] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
+    const [messageCount, setMessageCount] = useState<number>(0);
+    const [showReadButton, setShowReadButton] = useState(false);
     const [debugLines, setDebugLines] = useState<string[]>([]);
     const esRef = useRef<EventSource | null>(null);
+    const hasActiveLink = url !== null;
 
     async function handleCreate() {
         setLoading(true);
         try {
-            const res = await fetch("/api/ask/create", { method: "POST" });
+            const res = await fetch("/api/ask/create", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ oneTimeRead }),
+            });
             const data = await res.json();
             console.log("Create response data:", data, data.url);
             setUrl(data.url ?? null);
 
             if (data.url) {
-                CommonLinkSet(data.url);
+                if (typeof data.oneTimeRead === "boolean") {
+                    setOneTimeRead(data.oneTimeRead);
+                }
+                await CommonLinkSet(data.url, typeof data.oneTimeRead === "boolean" ? data.oneTimeRead : oneTimeRead);
             }
         } finally {
             setLoading(false);
@@ -36,7 +49,33 @@ export default function CreatePage() {
         if (!res.ok) return;
 
         const data = await res.json();
+        if (data.oneTimeRead) {
+            const count = typeof data.messageCount === "number" ? data.messageCount : 0;
+            setMessageCount(count);
+            setShowReadButton(count > 0);
+            return count;
+        }
+
         setMessages(data.messages ?? []);
+        setMessageCount(typeof data.messageCount === "number" ? data.messageCount : (data.messages ?? []).length);
+        setShowReadButton(Boolean(data.oneTimeRead) && (typeof data.messageCount === "number" ? data.messageCount : 0) > 0);
+        return data.messageCount;
+    }
+
+    async function readOneTimeMessages(id?: string) {
+        const targetId = id ?? linkId;
+        if (!targetId) return;
+
+        const res = await fetch(`/api/s/${targetId}/messages`, {
+            method: "POST",
+        });
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setMessages((prev) => [...prev, ...(data.messages ?? [])]);
+        setMessageCount(typeof data.messageCount === "number" ? data.messageCount : (data.messages ?? []).length);
+        setShowReadButton(false);
     }
 
     async function DeleteLink() {
@@ -47,10 +86,13 @@ export default function CreatePage() {
         // await CommonLinkSet("");
         setLinkId(null);
         setUrl(null);
+        setOneTimeRead(false);
         setMessages([]);
+        setMessageCount(0);
+        setShowReadButton(false);
     }
 
-    async function CommonLinkSet(url: string) {
+    async function CommonLinkSet(url: string, isOneTimeRead = oneTimeRead) {
         try {
             const u = new URL(url);
             const parts = u.pathname.split("/");
@@ -127,9 +169,12 @@ export default function CreatePage() {
                 if (!data.url) return; // nothing exists → do NOT create
                 console.log("Existing link found:", data.url);
                 setUrl(data.url ?? null);
+                if (typeof data.oneTimeRead === "boolean") {
+                    setOneTimeRead(data.oneTimeRead);
+                }
 
                 if (data.url) {
-                    CommonLinkSet(data.url);
+                    CommonLinkSet(data.url, typeof data.oneTimeRead === "boolean" ? data.oneTimeRead : false);
                 }
             }
             finally {
@@ -143,31 +188,46 @@ export default function CreatePage() {
     return (
         <div className="p-8">
             <h1 className="text-2xl mb-4">Create a private message link</h1>
+            {!hasActiveLink && (
+                <label className="mb-4 flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={oneTimeRead}
+                        onChange={(e) => setOneTimeRead(e.target.checked)}
+                        className="h-4 w-4"
+                    />
+                    <span>One Time read</span>
+                </label>
+            )}
             <div className="flex gap-2">
-                <button
-                    className="px-4 py-2 bg-blue-600 text-white rounded"
-                    onClick={handleCreate}
-                    disabled={loading}
-                >
-                    {loading ? "Working..." : "Create a new link"}
-                </button>
+                {!hasActiveLink && (
+                    <button
+                        className="px-4 py-2 bg-blue-600 text-white rounded"
+                        onClick={handleCreate}
+                        disabled={loading}
+                    >
+                        {loading ? "Working..." : "Create a new link"}
+                    </button>
+                )}
 
 
-
+                {linkId && (
                 <button
                     className="px-4 py-2 bg-green-600 text-white rounded"
                     onClick={() => fetchMessages()}
                     disabled={!linkId}
-                >
+                    >
                     Refresh messages
                 </button>
-                <button
-                    className="px-4 py-2 bg-red-800 text-white rounded"
-                    onClick={() => DeleteLink()}
-                    disabled={!linkId}
-                >
-                    Delete link
-                </button>
+                )}
+                    {linkId && (
+                    <button
+                        className="px-4 py-2 bg-red-800 text-white rounded"
+                        onClick={() => DeleteLink()}
+                    >
+                        Delete link
+                    </button>
+                )}
             </div>
 
             {url !== null && (
@@ -176,14 +236,26 @@ export default function CreatePage() {
                     <a key={url} className="text-blue-700 break-all" href={url} target="_blank" rel="noreferrer">
                         {url}
                     </a>
+                    <p className="mt-2 text-sm text-gray-600">
+                        One Time read: {oneTimeRead ? "enabled" : "disabled"}
+                    </p>
                 </div>
             )}
 
             {linkId && (
                 <div className="mt-6">
                     <h2 className="text-xl mb-2">Messages for this link</h2>
+                    <p className="mb-3 text-sm text-gray-600">Message count: {messageCount}</p>
+                    {oneTimeRead && messageCount > 0 && (
+                        <button
+                            className="mb-3 px-4 py-2 bg-black text-white rounded"
+                            onClick={() => readOneTimeMessages()}
+                        >
+                            Read message{messageCount > 1 ? "s" : ""}
+                        </button>
+                    )}
                     {messages.length === 0 ? (
-                        <p className="text-muted">No messages yet.</p>
+                        <p className="text-muted">{oneTimeRead ? "Messages are hidden until you read them." : "No messages yet."}</p>
                     ) : (
                         <ul className="space-y-2">
                             {messages.map((m) => (

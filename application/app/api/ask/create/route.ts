@@ -5,14 +5,18 @@ import crypto from "crypto";
 import { createLink } from "@/lib/message-store";
 import { SqliteSessionStore } from "@/lib/session-store";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
+import type { AppSession } from "@/lib/session-types";
 import { NextRequest } from "next/server";
-import { getOldLink } from "@/lib/message-store";
+import { getLinkOneTimeRead, getOldLink } from "@/lib/message-store";
 
 export const runtime = "nodejs";
 
 const store = new SqliteSessionStore();
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({} as { oneTimeRead?: boolean }));
+  const oneTimeRead = Boolean(body?.oneTimeRead);
+
   // console.log("POST /api/ask/create called");
   const cookieStore = await cookies();
   const sid = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -25,9 +29,10 @@ export async function POST() {
     const session = await store.get(sid);
     if (session) {
         console.log("session", session);
-      const updated = {
+      const updated: AppSession = {
         ...session,
         lastSeenAt: new Date().toISOString(),
+        oneTimeRead,
       };
 
       await store.touch(sid, updated);
@@ -52,11 +57,12 @@ export async function POST() {
 
     const maxAge = 30 * 24 * 60 * 60;
 
-    const sessionObj = {
+    const sessionObj: AppSession = {
       startedAt: now,
       lastSeenAt: now,
       userAgent,
       ipAddress: ip,
+      oneTimeRead,
       cookie: {
         httpOnly: true,
         path: "/",
@@ -72,11 +78,11 @@ export async function POST() {
 
   // Create link
   const id = crypto.randomUUID();
-  createLink(id, effectiveSid);
+  createLink(id, effectiveSid, oneTimeRead);
 
   const url = `${process.env.AUTH_URL ?? "http://localhost:3000"}/s/${id}`;
 
-  const response = NextResponse.json({ ok: true, url });
+  const response = NextResponse.json({ ok: true, url, oneTimeRead });
 
   if (!sid) {
     response.cookies.set(SESSION_COOKIE_NAME, effectiveSid, {
@@ -104,6 +110,7 @@ export async function GET(
   console.log("Old link for sid", sid, "is", oldLink);
 
   const url = oldLink ? `${process.env.AUTH_URL ?? "http://localhost:3000"}/s/${oldLink}` : null;
+  const oneTimeRead = oldLink ? getLinkOneTimeRead(oldLink) : false;
 
-  return NextResponse.json({ ok: true, url });
+  return NextResponse.json({ ok: true, url, oneTimeRead });
 }
