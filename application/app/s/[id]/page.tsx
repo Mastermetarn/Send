@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { appApiPath } from "@/lib/paths";
 
 export default function SessionPage() {
     const params = useParams();
@@ -15,7 +16,7 @@ export default function SessionPage() {
         if (!id) return;
 
         async function checkLink() {
-            const res = await fetch(`/api/s/${encodeURIComponent(id)}/exists`);
+            const res = await fetch(appApiPath(`/s/${encodeURIComponent(id)}/exists`));
             const data = await res.json();
             setValidLink(data.exists);
         }
@@ -31,7 +32,7 @@ export default function SessionPage() {
 
         setStatus("sending");
 
-        const res = await fetch(`/api/s/${encodeURIComponent(id)}/message`, {
+        const res = await fetch(appApiPath(`/s/${encodeURIComponent(id)}/message`), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content }),

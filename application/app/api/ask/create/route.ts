@@ -3,7 +3,7 @@ import { cookies, headers } from "next/headers";
 import crypto from "crypto";
 
 import { createLink } from "@/lib/message-store";
-import { appUrl } from "@/lib/paths";
+import { appUrl, requestOrigin } from "@/lib/paths";
 import { SqliteSessionStore } from "@/lib/session-store";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
@@ -81,11 +81,11 @@ export async function POST(req: NextRequest) {
   const id = crypto.randomUUID();
   createLink(id, effectiveSid, oneTimeRead);
 
-  const url = appUrl(`/s/${id}`);
+  const url = appUrl(`/s/${id}`, requestOrigin(req));
 
   const response = NextResponse.json({ ok: true, url, oneTimeRead });
 
-  if (!sid) {
+  if (!sid || sid !== effectiveSid) {
     response.cookies.set(SESSION_COOKIE_NAME, effectiveSid, {
       httpOnly: true,
       sameSite: "lax",
@@ -98,10 +98,7 @@ export async function POST(req: NextRequest) {
   return response;
 }
 
-export async function GET(
-  _req: NextRequest,
-//   { params }: { > },
-) {
+export async function GET(req: NextRequest) {
 //   const { id } = await params;
   // console.log("GET /api/ask/create called");
   const cookieStore = await cookies();
@@ -110,7 +107,7 @@ export async function GET(
   const oldLink = getOldLink(String(sid));
   console.log("Old link for sid", sid, "is", oldLink);
 
-  const url = oldLink ? appUrl(`/s/${oldLink}`) : null;
+  const url = oldLink ? appUrl(`/s/${oldLink}`, requestOrigin(req)) : null;
   const oneTimeRead = oldLink ? getLinkOneTimeRead(oldLink) : false;
 
   return NextResponse.json({ ok: true, url, oneTimeRead });
