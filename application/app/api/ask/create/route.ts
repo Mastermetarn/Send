@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import crypto from "crypto";
 
 import { createLink } from "@/lib/message-store";
+import { appUrl } from "@/lib/paths";
 import { SqliteSessionStore } from "@/lib/session-store";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
   const id = crypto.randomUUID();
   createLink(id, effectiveSid, oneTimeRead);
 
-  const url = `${process.env.AUTH_URL ?? "http://localhost:3000"}/s/${id}`;
+  const url = appUrl(`/s/${id}`);
 
   const response = NextResponse.json({ ok: true, url, oneTimeRead });
 
@@ -109,7 +110,7 @@ export async function GET(
   const oldLink = getOldLink(String(sid));
   console.log("Old link for sid", sid, "is", oldLink);
 
-  const url = oldLink ? `${process.env.AUTH_URL ?? "http://localhost:3000"}/s/${oldLink}` : null;
+  const url = oldLink ? appUrl(`/s/${oldLink}`) : null;
   const oneTimeRead = oldLink ? getLinkOneTimeRead(oldLink) : false;
 
   return NextResponse.json({ ok: true, url, oneTimeRead });

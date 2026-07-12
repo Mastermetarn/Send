@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { appApiPath } from "@/lib/paths";
 
 type StateResponse = {
   ok: boolean;
@@ -32,7 +33,7 @@ export default function GiveMessagePage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/g/${encodeURIComponent(id)}/state`);
+      const res = await fetch(appApiPath(`/g/${encodeURIComponent(id)}/state`));
 
       if (res.status === 404) {
         setNotFound(true);
@@ -54,7 +55,7 @@ export default function GiveMessagePage() {
 
     setStatus("reading");
 
-    const res = await fetch(`/api/g/${encodeURIComponent(id)}/read`, {
+    const res = await fetch(appApiPath(`/g/${encodeURIComponent(id)}/read`), {
       method: "POST",
     });
 

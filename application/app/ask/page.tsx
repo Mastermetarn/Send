@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { appApiPath } from "@/lib/paths";
 
 type Message = { id: number; content: string; createdAt: number };
 
@@ -19,7 +20,7 @@ export default function CreatePage() {
     async function handleCreate() {
         setLoading(true);
         try {
-            const res = await fetch("/api/ask/create", {
+            const res = await fetch(appApiPath("/ask/create"), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -45,7 +46,7 @@ export default function CreatePage() {
         const targetId = id ?? linkId;
         if (!targetId) return;
 
-        const res = await fetch(`/api/s/${targetId}/messages`);
+        const res = await fetch(appApiPath(`/s/${targetId}/messages`));
         if (!res.ok) return;
 
         const data = await res.json();
@@ -66,7 +67,7 @@ export default function CreatePage() {
         const targetId = id ?? linkId;
         if (!targetId) return;
 
-        const res = await fetch(`/api/s/${targetId}/messages`, {
+        const res = await fetch(appApiPath(`/s/${targetId}/messages`), {
             method: "POST",
         });
 
@@ -80,7 +81,7 @@ export default function CreatePage() {
 
     async function DeleteLink() {
         console.log("Attempting to delete link with id=", linkId);
-        const res = await fetch("/api/ask/delete", { method: "POST" });
+        const res = await fetch(appApiPath("/ask/delete"), { method: "POST" });
         if (!res.ok) return;
 
         // await CommonLinkSet("");
@@ -115,7 +116,7 @@ export default function CreatePage() {
             esRef.current = null;
         }
 
-        const es = new EventSource(`/api/s/${encodeURIComponent(linkId)}/stream`);
+        const es = new EventSource(appApiPath(`/s/${encodeURIComponent(linkId)}/stream`));
         esRef.current = es;
 
         // es.onopen = () => {
@@ -157,7 +158,7 @@ export default function CreatePage() {
         async function checkExistingLink() {
             setLoading(true);
             try {
-                const res = await fetch("/api/ask/create", {
+                const res = await fetch(appApiPath("/ask/create"), {
                     method: "GET",
                 });
 

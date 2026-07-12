@@ -2,6 +2,7 @@
 
 
 import { useEffect, useMemo, useState } from "react";
+import { appApiPath } from "@/lib/paths";
 
 type GiveCreateResponse = {
   ok: boolean;
@@ -43,7 +44,7 @@ const hasLink = Boolean(url);
   async function loadExisting() {
     setLoading(true);
       try {
-        const res = await fetch("/api/give/create", { method: "GET" });
+        const res = await fetch(appApiPath("/give/create"), { method: "GET" });
       if (!res.ok) return;
 
       const data = (await res.json()) as GiveCreateResponse;
@@ -72,7 +73,7 @@ const hasLink = Boolean(url);
 
     setLoading(true);
     try {
-      const res = await fetch("/api/give/create", {
+      const res = await fetch(appApiPath("/give/create"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -104,7 +105,7 @@ const hasLink = Boolean(url);
   async function deleteLink() {
     setLoading(true);
     try {
-      const res = await fetch("/api/give/delete", { method: "POST" });
+      const res = await fetch(appApiPath("/give/delete"), { method: "POST" });
       if (!res.ok) return;
 
       setUrl(null);
@@ -127,7 +128,7 @@ const hasLink = Boolean(url);
     useEffect(() => {
         if (!activeLinkId) return;
 
-    const source = new EventSource(`/api/give/${encodeURIComponent(activeLinkId)}/stream`);
+    const source = new EventSource(appApiPath(`/give/${encodeURIComponent(activeLinkId)}/stream`));
 
     source.onmessage = (event) => {
         try {

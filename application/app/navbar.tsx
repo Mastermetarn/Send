@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { stripAppBasePath } from "@/lib/paths";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const normalizedPathname = stripAppBasePath(pathname);
 
   if (
-    pathname === "/g" ||
-    pathname === "/s" ||
-    pathname.startsWith("/g/") ||
-    pathname.startsWith("/s/")
+    normalizedPathname === "/g" ||
+    normalizedPathname === "/s" ||
+    normalizedPathname.startsWith("/g/") ||
+    normalizedPathname.startsWith("/s/")
   ) {
     return null;
   }

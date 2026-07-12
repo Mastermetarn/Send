@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import crypto from "crypto";
 
+import { appUrl } from "@/lib/paths";
 import { SqliteSessionStore } from "@/lib/session-store";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
   const id = crypto.randomUUID();
   createGiveLink(id, effectiveSid, message, maxReads);
 
-  const url = `${process.env.AUTH_URL ?? "http://localhost:3000"}/g/${id}`;
+  const url = appUrl(`/g/${id}`);
   const stats = getGiveStats(id);
 
   const response = NextResponse.json({
@@ -129,7 +130,7 @@ export async function GET() {
   }
 
   const stats = getGiveStats(link.id);
-  const url = `${process.env.AUTH_URL ?? "http://localhost:3000"}/g/${link.id}`;
+  const url = appUrl(`/g/${link.id}`);
 
   return NextResponse.json({
     ok: true,
