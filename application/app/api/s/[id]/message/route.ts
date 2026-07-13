@@ -18,10 +18,12 @@ export async function POST(
 
   const body = await req.json();
   const content = String(body.content ?? "").trim();
+  const encryptedKey = String(body.encryptedKey ?? "").trim();
+  const iv = String(body.iv ?? "").trim();
 
-  if (!content) {
+  if (!content || !encryptedKey || !iv) {
     return NextResponse.json(
-      { ok: false, error: "empty" },
+      { ok: false, error: "invalid-payload" },
       { status: 400 },
     );
   }
@@ -31,7 +33,7 @@ export async function POST(
   const posterSid =
     cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
 
-  addMessage(id, content, posterSid);
+  addMessage(id, content, encryptedKey, iv, posterSid);
 
   return NextResponse.json({ ok: true });
 }

@@ -8,15 +8,25 @@ import { SqliteSessionStore } from "@/lib/session-store";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
 import { NextRequest } from "next/server";
-import { getLinkOneTimeRead, getOldLink } from "@/lib/message-store";
+import { getLinkOneTimeRead, getLinkPublicKey, getOldLink } from "@/lib/message-store";
 
 export const runtime = "nodejs";
 
 const store = new SqliteSessionStore();
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({} as { oneTimeRead?: boolean }));
+  const body = await req
+    .json()
+    .catch(() => ({} as { oneTimeRead?: boolean; publicKey?: string }));
   const oneTimeRead = Boolean(body?.oneTimeRead);
+  const publicKey = String(body?.publicKey ?? "").trim();
+
+  if (!publicKey) {
+    return NextResponse.json(
+      { ok: false, error: "public-key-required" },
+      { status: 400 },
+    );
+  }
 
   // console.log("POST /api/ask/create called");
   const cookieStore = await cookies();
@@ -79,11 +89,11 @@ export async function POST(req: NextRequest) {
 
   // Create link
   const id = crypto.randomUUID();
-  createLink(id, effectiveSid, oneTimeRead);
+  createLink(id, effectiveSid, oneTimeRead, publicKey);
 
   const url = appUrl(`/s/${id}`, requestOrigin(req));
 
-  const response = NextResponse.json({ ok: true, url, oneTimeRead });
+  const response = NextResponse.json({ ok: true, url, oneTimeRead, publicKey });
 
   if (!sid || sid !== effectiveSid) {
     response.cookies.set(SESSION_COOKIE_NAME, effectiveSid, {
@@ -109,6 +119,7 @@ export async function GET(req: NextRequest) {
 
   const url = oldLink ? appUrl(`/s/${oldLink}`, requestOrigin(req)) : null;
   const oneTimeRead = oldLink ? getLinkOneTimeRead(oldLink) : false;
+  const publicKey = oldLink ? getLinkPublicKey(oldLink) : null;
 
-  return NextResponse.json({ ok: true, url, oneTimeRead });
+  return NextResponse.json({ ok: true, url, oneTimeRead, publicKey });
 }

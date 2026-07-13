@@ -16,6 +16,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS links (
     id TEXT PRIMARY KEY,
     ownerSid TEXT NOT NULL,
+    publicKey TEXT,
     oneTimeRead INTEGER NOT NULL,
     created_at INTEGER NOT NULL
   );
@@ -24,6 +25,8 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     link_id TEXT NOT NULL,
     content TEXT NOT NULL,
+    encrypted_key TEXT,
+    iv TEXT,
     poster_sid TEXT,
     created_at INTEGER NOT NULL
   );
@@ -38,10 +41,19 @@ if (!linkInfo.find((c) => c.name === "oneTimeRead")) {
     CREATE TABLE links (
       id TEXT PRIMARY KEY,
       ownerSid TEXT NOT NULL,
+      publicKey TEXT,
       oneTimeRead INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     );
   `);
+}
+
+if (!linkInfo.find((c) => c.name === "publicKey")) {
+  try {
+    db.prepare("ALTER TABLE links ADD COLUMN publicKey TEXT").run();
+  } catch (e) {
+    // ignore migration failures on older databases
+  }
 }
 
 // Migrate: ensure messages.poster_sid column exists for older DBs
@@ -56,7 +68,28 @@ if (!msgInfo.find((c) => c.name === "poster_sid")) {
   }
 }
 
-export function createLink(id: string, ownerSid: string, oneTimeRead: boolean) {
+if (!msgInfo.find((c) => c.name === "encrypted_key")) {
+  try {
+    db.prepare("ALTER TABLE messages ADD COLUMN encrypted_key TEXT").run();
+  } catch (e) {
+    // ignore migration failures on older databases
+  }
+}
+
+if (!msgInfo.find((c) => c.name === "iv")) {
+  try {
+    db.prepare("ALTER TABLE messages ADD COLUMN iv TEXT").run();
+  } catch (e) {
+    // ignore migration failures on older databases
+  }
+}
+
+export function createLink(
+  id: string,
+  ownerSid: string,
+  oneTimeRead: boolean,
+  publicKey: string,
+) {
   const now = Date.now();
 
   //remove old link for this owner if exists
@@ -67,8 +100,8 @@ export function createLink(id: string, ownerSid: string, oneTimeRead: boolean) {
   }
 
   db.prepare(
-    "INSERT INTO links (id, ownerSid, oneTimeRead, created_at) VALUES (?, ?, ?, ?)",
-  ).run(id, ownerSid, oneTimeRead ? 1 : 0, now);
+    "INSERT INTO links (id, ownerSid, publicKey, oneTimeRead, created_at) VALUES (?, ?, ?, ?, ?)",
+  ).run(id, ownerSid, publicKey, oneTimeRead ? 1 : 0, now);
 }
 
 export function getLinkOwner(id: string) {
@@ -84,6 +117,14 @@ export function getLinkOneTimeRead(id: string) {
     | undefined;
 
   return row?.oneTimeRead === 1;
+}
+
+export function getLinkPublicKey(id: string) {
+  const row = db.prepare("SELECT publicKey FROM links WHERE id = ?").get(id) as
+    | { publicKey: string | null }
+    | undefined;
+
+  return row?.publicKey ?? null;
 }
 
 // In-memory emitters for Server-Sent Events per link
@@ -110,6 +151,8 @@ export function removeLink(ownerSid: string) {
 export function addMessage(
   linkId: string,
   content: string,
+  encryptedKey: string,
+  iv: string,
   posterSid?: string | null,
 ) {
   const validLink = linkExists(linkId);
@@ -121,9 +164,9 @@ export function addMessage(
   const now = Date.now();
   const res = db
     .prepare(
-      "INSERT INTO messages (link_id, content, poster_sid, created_at) VALUES (?, ?, ?, ?)",
+      "INSERT INTO messages (link_id, content, encrypted_key, iv, poster_sid, created_at) VALUES (?, ?, ?, ?, ?, ?)",
     )
-    .run(linkId, content, posterSid ?? null, now) as {
+    .run(linkId, content, encryptedKey, iv, posterSid ?? null, now) as {
     lastInsertRowid?: number;
   };
   console.log("Message added to DB with id=", res.lastInsertRowid);
@@ -132,6 +175,8 @@ export function addMessage(
   const message = {
     id,
     content,
+    encryptedKey,
+    iv,
     posterSid: posterSid ?? null,
     createdAt: now,
   };
@@ -155,11 +200,13 @@ export function linkExists(linkId: string) {
 export function getMessagesForLink(linkId: string) {
   const rows = db
     .prepare(
-      "SELECT id, content, poster_sid, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
+      "SELECT id, content, encrypted_key, iv, poster_sid, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
     )
     .all(linkId) as Array<{
     id: number;
     content: string;
+    encrypted_key?: string | null;
+    iv?: string | null;
     poster_sid?: string | null;
     created_at: number;
   }>;
@@ -167,6 +214,8 @@ export function getMessagesForLink(linkId: string) {
   return rows.map((r) => ({
     id: r.id,
     content: r.content,
+    encryptedKey: r.encrypted_key ?? null,
+    iv: r.iv ?? null,
     posterSid: r.poster_sid ?? null,
     createdAt: r.created_at,
   }));
@@ -184,11 +233,13 @@ export function consumeMessagesForLink(linkId: string) {
   const consume = db.transaction((targetLinkId: string) => {
     const rows = db
       .prepare(
-        "SELECT id, content, poster_sid, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
+        "SELECT id, content, encrypted_key, iv, poster_sid, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
       )
       .all(targetLinkId) as Array<{
       id: number;
       content: string;
+      encrypted_key?: string | null;
+      iv?: string | null;
       poster_sid?: string | null;
       created_at: number;
     }>;
@@ -198,6 +249,8 @@ export function consumeMessagesForLink(linkId: string) {
     return rows.map((r) => ({
       id: r.id,
       content: r.content,
+      encryptedKey: r.encrypted_key ?? null,
+      iv: r.iv ?? null,
       posterSid: r.poster_sid ?? null,
       createdAt: r.created_at,
     }));
