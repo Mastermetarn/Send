@@ -130,6 +130,29 @@ export function getLinkPublicKey(id: string) {
 // In-memory emitters for Server-Sent Events per link
 const emitters = new Map<string, EventEmitter>();
 
+export function purgeExpiredAskData(cutoff: number) {
+  const expiredLinks = db
+    .prepare("SELECT id FROM links WHERE created_at <= ?")
+    .all(cutoff) as Array<{ id: string }>;
+
+  if (expiredLinks.length === 0) return 0;
+
+  const purge = db.transaction(() => {
+    db.prepare(
+      "DELETE FROM messages WHERE link_id IN (SELECT id FROM links WHERE created_at <= ?)",
+    ).run(cutoff);
+    db.prepare("DELETE FROM links WHERE created_at <= ?").run(cutoff);
+  });
+
+  purge();
+
+  for (const { id } of expiredLinks) {
+    emitters.delete(id);
+  }
+
+  return expiredLinks.length;
+}
+
 export function getEmitter(linkId: string) {
   let e = emitters.get(linkId);
   if (!e) {
@@ -157,8 +180,6 @@ export function addMessage(
 ) {
   const validLink = linkExists(linkId);
   if (!validLink) {
-    // throw new Error("Link does not exist");
-    console.log("Attempted to add message to non-existent linkId=", linkId);
     return null;
   }
   const now = Date.now();
@@ -169,7 +190,6 @@ export function addMessage(
     .run(linkId, content, encryptedKey, iv, posterSid ?? null, now) as {
     lastInsertRowid?: number;
   };
-  console.log("Message added to DB with id=", res.lastInsertRowid);
   const id = (res && (res as any).lastInsertRowid) ?? null;
 
   const message = {

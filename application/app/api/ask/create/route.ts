@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 
 import { createLink } from "@/lib/message-store";
@@ -28,7 +28,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // console.log("POST /api/ask/create called");
   const cookieStore = await cookies();
   const sid = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -36,10 +35,8 @@ export async function POST(req: NextRequest) {
 
   // Reuse session if valid
   if (sid) {
-      console.log("Create API called, sid=", sid);
     const session = await store.get(sid);
     if (session) {
-        console.log("session", session);
       const updated: AppSession = {
         ...session,
         lastSeenAt: new Date().toISOString(),
@@ -52,16 +49,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // console.log("effectiveSid=", effectiveSid);
-
   // Create new session
   if (!effectiveSid) {
-    const h = await headers();
-
-    const userAgent = h.get("user-agent") ?? null;
-
-    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-
     effectiveSid = crypto.randomUUID();
 
     const now = new Date().toISOString();
@@ -71,8 +60,6 @@ export async function POST(req: NextRequest) {
     const sessionObj: AppSession = {
       startedAt: now,
       lastSeenAt: now,
-      userAgent,
-      ipAddress: ip,
       oneTimeRead,
       cookie: {
         httpOnly: true,
@@ -109,13 +96,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-//   const { id } = await params;
-  // console.log("GET /api/ask/create called");
   const cookieStore = await cookies();
   const sid = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   const oldLink = getOldLink(String(sid));
-  console.log("Old link for sid", sid, "is", oldLink);
 
   const url = oldLink ? appUrl(`/s/${oldLink}`, requestOrigin(req)) : null;
   const oneTimeRead = oldLink ? getLinkOneTimeRead(oldLink) : false;

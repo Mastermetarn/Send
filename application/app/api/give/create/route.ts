@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 
 import { appUrl, requestOrigin } from "@/lib/paths";
@@ -37,11 +37,6 @@ async function getOrCreateOwnerSid() {
   }
 
   if (!effectiveSid) {
-    const h = await headers();
-
-    const userAgent = h.get("user-agent") ?? null;
-    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-
     effectiveSid = crypto.randomUUID();
 
     const now = new Date().toISOString();
@@ -50,8 +45,6 @@ async function getOrCreateOwnerSid() {
     const sessionObj: AppSession = {
       startedAt: now,
       lastSeenAt: now,
-      userAgent,
-      ipAddress: ip,
       cookie: {
         httpOnly: true,
         path: "/",

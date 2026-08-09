@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 
 import { SqliteSessionStore } from "@/lib/session-store";
@@ -35,12 +35,6 @@ export async function POST() {
   }
 
   // Create new session
-  const h = await headers();
-  const userAgent = h.get("user-agent") ?? null;
-
-  const forwarded = h.get("x-forwarded-for") ?? "";
-  const ip = forwarded.split(",")[0]?.trim() || null;
-
   const sid = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -49,8 +43,6 @@ export async function POST() {
   const sessionObj: AppSession = {
     startedAt: now,
     lastSeenAt: now,
-    userAgent,
-    ipAddress: ip,
     oneTimeRead: false,
     cookie: {
       httpOnly: true,
