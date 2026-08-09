@@ -3,7 +3,11 @@ import { cookies } from "next/headers";
 import crypto from "crypto";
 
 import { SqliteSessionStore } from "@/lib/session-store";
-import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_DAYS } from "@/lib/session";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_SECURE,
+  SESSION_MAX_AGE_DAYS,
+} from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
 
 export const runtime = "nodejs";
@@ -47,7 +51,7 @@ export async function POST() {
     cookie: {
       httpOnly: true,
       path: "/",
-      secure: process.env.NODE_ENV === "production",
+      secure: SESSION_COOKIE_SECURE,
       sameSite: "lax" as const,
       maxAge,
       expires: new Date(Date.now() + maxAge * 1000), // <-- fix
@@ -64,7 +68,7 @@ export async function POST() {
   res.cookies.set(SESSION_COOKIE_NAME, sid, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: SESSION_COOKIE_SECURE,
     maxAge: SESSION_MAX_AGE_DAYS * 24 * 60 * 60,
     path: "/",
   });

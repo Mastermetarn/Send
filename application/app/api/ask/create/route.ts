@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { createLink } from "@/lib/message-store";
 import { appUrl, requestOrigin } from "@/lib/paths";
 import { SqliteSessionStore } from "@/lib/session-store";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SESSION_COOKIE_NAME, SESSION_COOKIE_SECURE } from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
 import { NextRequest } from "next/server";
 import { getLinkOneTimeRead, getLinkPublicKey, getOldLink } from "@/lib/message-store";
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
       cookie: {
         httpOnly: true,
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: SESSION_COOKIE_SECURE,
         sameSite: "lax" as const,
         maxAge,
         expires: new Date(Date.now() + maxAge * 1000), // <-- fix
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     response.cookies.set(SESSION_COOKIE_NAME, effectiveSid, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: SESSION_COOKIE_SECURE,
       maxAge: 30 * 24 * 60 * 60,
       path: "/",
     });

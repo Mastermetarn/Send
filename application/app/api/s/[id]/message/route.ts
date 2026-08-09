@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { addMessage, linkExists } from "@/lib/message-store";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -28,12 +26,7 @@ export async function POST(
     );
   }
 
-  // Save message for link; record poster session if present
-  const cookieStore = await cookies();
-  const posterSid =
-    cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
-
-  addMessage(id, content, encryptedKey, iv, posterSid);
+  addMessage(id, content, encryptedKey, iv);
 
   return NextResponse.json({ ok: true });
 }
