@@ -23,6 +23,45 @@ db.exec(`
 
 type StoreSession = Parameters<SessionStore["set"]>[1];
 
+export function purgeExpiredSessions(now = Date.now()) {
+  return db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now)
+    .changes;
+}
+
+export function purgeLegacySessionMetadata() {
+  const rows = db.prepare("SELECT sid, data FROM sessions").all() as Array<{
+    sid: string;
+    data: string;
+  }>;
+  const update = db.prepare("UPDATE sessions SET data = ? WHERE sid = ?");
+
+  return db.transaction(() => {
+    let sanitized = 0;
+
+    for (const row of rows) {
+      let session: Record<string, unknown>;
+
+      try {
+        session = JSON.parse(row.data) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      const hadIpAddress = Object.hasOwn(session, "ipAddress");
+      const hadUserAgent = Object.hasOwn(session, "userAgent");
+
+      if (!hadIpAddress && !hadUserAgent) continue;
+
+      delete session.ipAddress;
+      delete session.userAgent;
+      update.run(JSON.stringify(session), row.sid);
+      sanitized += 1;
+    }
+
+    return sanitized;
+  })();
+}
+
 function getExpiresAt(session: StoreSession): number {
   const cookie = session.cookie;
 

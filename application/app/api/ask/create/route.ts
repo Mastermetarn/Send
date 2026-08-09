@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 
 import { createLink } from "@/lib/message-store";
 import { appUrl, requestOrigin } from "@/lib/paths";
 import { SqliteSessionStore } from "@/lib/session-store";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SESSION_COOKIE_NAME, SESSION_COOKIE_SECURE } from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
 import { NextRequest } from "next/server";
 import { getLinkOneTimeRead, getLinkPublicKey, getOldLink } from "@/lib/message-store";
@@ -28,7 +28,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // console.log("POST /api/ask/create called");
   const cookieStore = await cookies();
   const sid = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -36,10 +35,8 @@ export async function POST(req: NextRequest) {
 
   // Reuse session if valid
   if (sid) {
-      console.log("Create API called, sid=", sid);
     const session = await store.get(sid);
     if (session) {
-        console.log("session", session);
       const updated: AppSession = {
         ...session,
         lastSeenAt: new Date().toISOString(),
@@ -52,16 +49,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // console.log("effectiveSid=", effectiveSid);
-
   // Create new session
   if (!effectiveSid) {
-    const h = await headers();
-
-    const userAgent = h.get("user-agent") ?? null;
-
-    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-
     effectiveSid = crypto.randomUUID();
 
     const now = new Date().toISOString();
@@ -71,13 +60,11 @@ export async function POST(req: NextRequest) {
     const sessionObj: AppSession = {
       startedAt: now,
       lastSeenAt: now,
-      userAgent,
-      ipAddress: ip,
       oneTimeRead,
       cookie: {
         httpOnly: true,
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: SESSION_COOKIE_SECURE,
         sameSite: "lax" as const,
         maxAge,
         expires: new Date(Date.now() + maxAge * 1000), // <-- fix
@@ -99,7 +86,7 @@ export async function POST(req: NextRequest) {
     response.cookies.set(SESSION_COOKIE_NAME, effectiveSid, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: SESSION_COOKIE_SECURE,
       maxAge: 30 * 24 * 60 * 60,
       path: "/",
     });
@@ -109,13 +96,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-//   const { id } = await params;
-  // console.log("GET /api/ask/create called");
   const cookieStore = await cookies();
   const sid = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   const oldLink = getOldLink(String(sid));
-  console.log("Old link for sid", sid, "is", oldLink);
 
   const url = oldLink ? appUrl(`/s/${oldLink}`, requestOrigin(req)) : null;
   const oneTimeRead = oldLink ? getLinkOneTimeRead(oldLink) : false;

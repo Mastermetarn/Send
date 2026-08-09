@@ -41,6 +41,37 @@ db.exec(`
   );
 `);
 
+export function purgeExpiredGiveData(cutoff: number) {
+  const expiredLinks = db
+    .prepare("SELECT id FROM give_links WHERE created_at <= ?")
+    .all(cutoff) as Array<{ id: string }>;
+
+  if (expiredLinks.length === 0) return 0;
+
+  const purge = db.transaction(() => {
+    const expiredLinkIds = "SELECT id FROM give_links WHERE created_at <= ?";
+
+    db.prepare(
+      `DELETE FROM give_access_events WHERE link_id IN (${expiredLinkIds})`,
+    ).run(cutoff);
+    db.prepare(
+      `DELETE FROM give_read_events WHERE link_id IN (${expiredLinkIds})`,
+    ).run(cutoff);
+    db.prepare(
+      `DELETE FROM give_messages WHERE link_id IN (${expiredLinkIds})`,
+    ).run(cutoff);
+    db.prepare("DELETE FROM give_links WHERE created_at <= ?").run(cutoff);
+  });
+
+  purge();
+
+  for (const { id } of expiredLinks) {
+    giveEmitters.delete(id);
+  }
+
+  return expiredLinks.length;
+}
+
 export function getOwnerGiveLink(ownerSid: string) {
   const row = db
     .prepare(

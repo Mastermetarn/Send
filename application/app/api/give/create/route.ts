@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 
 import { appUrl, requestOrigin } from "@/lib/paths";
 import { SqliteSessionStore } from "@/lib/session-store";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SESSION_COOKIE_NAME, SESSION_COOKIE_SECURE } from "@/lib/session";
 import type { AppSession } from "@/lib/session-types";
 import {
   createGiveLink,
@@ -37,11 +37,6 @@ async function getOrCreateOwnerSid() {
   }
 
   if (!effectiveSid) {
-    const h = await headers();
-
-    const userAgent = h.get("user-agent") ?? null;
-    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-
     effectiveSid = crypto.randomUUID();
 
     const now = new Date().toISOString();
@@ -50,12 +45,10 @@ async function getOrCreateOwnerSid() {
     const sessionObj: AppSession = {
       startedAt: now,
       lastSeenAt: now,
-      userAgent,
-      ipAddress: ip,
       cookie: {
         httpOnly: true,
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: SESSION_COOKIE_SECURE,
         sameSite: "lax" as const,
         maxAge,
         expires: new Date(Date.now() + maxAge * 1000),
@@ -107,7 +100,7 @@ export async function POST(req: NextRequest) {
     response.cookies.set(SESSION_COOKIE_NAME, effectiveSid, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: SESSION_COOKIE_SECURE,
       maxAge: 30 * 24 * 60 * 60,
       path: "/",
     });

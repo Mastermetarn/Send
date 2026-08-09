@@ -27,7 +27,6 @@ db.exec(`
     content TEXT NOT NULL,
     encrypted_key TEXT,
     iv TEXT,
-    poster_sid TEXT,
     created_at INTEGER NOT NULL
   );
 `);
@@ -56,18 +55,9 @@ if (!linkInfo.find((c) => c.name === "publicKey")) {
   }
 }
 
-// Migrate: ensure messages.poster_sid column exists for older DBs
 const msgInfo = db.prepare("PRAGMA table_info(messages)").all() as Array<{
   name: string;
 }>;
-if (!msgInfo.find((c) => c.name === "poster_sid")) {
-  try {
-    db.prepare("ALTER TABLE messages ADD COLUMN poster_sid TEXT").run();
-  } catch (e) {
-    // ignore if cannot alter (very old sqlite?)
-  }
-}
-
 if (!msgInfo.find((c) => c.name === "encrypted_key")) {
   try {
     db.prepare("ALTER TABLE messages ADD COLUMN encrypted_key TEXT").run();
@@ -130,6 +120,29 @@ export function getLinkPublicKey(id: string) {
 // In-memory emitters for Server-Sent Events per link
 const emitters = new Map<string, EventEmitter>();
 
+export function purgeExpiredAskData(cutoff: number) {
+  const expiredLinks = db
+    .prepare("SELECT id FROM links WHERE created_at <= ?")
+    .all(cutoff) as Array<{ id: string }>;
+
+  if (expiredLinks.length === 0) return 0;
+
+  const purge = db.transaction(() => {
+    db.prepare(
+      "DELETE FROM messages WHERE link_id IN (SELECT id FROM links WHERE created_at <= ?)",
+    ).run(cutoff);
+    db.prepare("DELETE FROM links WHERE created_at <= ?").run(cutoff);
+  });
+
+  purge();
+
+  for (const { id } of expiredLinks) {
+    emitters.delete(id);
+  }
+
+  return expiredLinks.length;
+}
+
 export function getEmitter(linkId: string) {
   let e = emitters.get(linkId);
   if (!e) {
@@ -153,31 +166,24 @@ export function addMessage(
   content: string,
   encryptedKey: string,
   iv: string,
-  posterSid?: string | null,
 ) {
   const validLink = linkExists(linkId);
   if (!validLink) {
-    // throw new Error("Link does not exist");
-    console.log("Attempted to add message to non-existent linkId=", linkId);
     return null;
   }
   const now = Date.now();
   const res = db
     .prepare(
-      "INSERT INTO messages (link_id, content, encrypted_key, iv, poster_sid, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO messages (link_id, content, encrypted_key, iv, created_at) VALUES (?, ?, ?, ?, ?)",
     )
-    .run(linkId, content, encryptedKey, iv, posterSid ?? null, now) as {
-    lastInsertRowid?: number;
-  };
-  console.log("Message added to DB with id=", res.lastInsertRowid);
-  const id = (res && (res as any).lastInsertRowid) ?? null;
+    .run(linkId, content, encryptedKey, iv, now);
+  const id = Number(res.lastInsertRowid);
 
   const message = {
     id,
     content,
     encryptedKey,
     iv,
-    posterSid: posterSid ?? null,
     createdAt: now,
   };
 
@@ -200,14 +206,13 @@ export function linkExists(linkId: string) {
 export function getMessagesForLink(linkId: string) {
   const rows = db
     .prepare(
-      "SELECT id, content, encrypted_key, iv, poster_sid, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
+      "SELECT id, content, encrypted_key, iv, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
     )
     .all(linkId) as Array<{
     id: number;
     content: string;
     encrypted_key?: string | null;
     iv?: string | null;
-    poster_sid?: string | null;
     created_at: number;
   }>;
 
@@ -216,7 +221,6 @@ export function getMessagesForLink(linkId: string) {
     content: r.content,
     encryptedKey: r.encrypted_key ?? null,
     iv: r.iv ?? null,
-    posterSid: r.poster_sid ?? null,
     createdAt: r.created_at,
   }));
 }
@@ -233,14 +237,13 @@ export function consumeMessagesForLink(linkId: string) {
   const consume = db.transaction((targetLinkId: string) => {
     const rows = db
       .prepare(
-        "SELECT id, content, encrypted_key, iv, poster_sid, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
+        "SELECT id, content, encrypted_key, iv, created_at FROM messages WHERE link_id = ? ORDER BY created_at ASC",
       )
       .all(targetLinkId) as Array<{
       id: number;
       content: string;
       encrypted_key?: string | null;
       iv?: string | null;
-      poster_sid?: string | null;
       created_at: number;
     }>;
 
@@ -251,7 +254,6 @@ export function consumeMessagesForLink(linkId: string) {
       content: r.content,
       encryptedKey: r.encrypted_key ?? null,
       iv: r.iv ?? null,
-      posterSid: r.poster_sid ?? null,
       createdAt: r.created_at,
     }));
   });

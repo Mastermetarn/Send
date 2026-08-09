@@ -10,8 +10,6 @@ export type AppSession = {
   };
   startedAt?: string;
   lastSeenAt?: string;
-  userAgent?: string | null;
-  ipAddress?: string | null;
   oneTimeRead?: boolean;
   [key: string]: unknown;
 };
